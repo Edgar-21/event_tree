@@ -1,86 +1,141 @@
 import matplotlib.pyplot as plt
+import math
+import numpy as np
 
 
-def draw_event_tree(master_sequence, sequences):
-    events = master_sequence.split("/")
+def probability_from_sequence(sequence, probabilities):
+    print("hi", sequence)
+    failures = sequence.split("/")
+    p_vals = []
+    for event in probabilities:
+        if event in failures:
+            p_vals.append(probabilities[event])
+    return np.prod(p_vals)
+
+
+def draw_event_tree(top_events, sequences, x_step=2.0, y_step=-0.5):
+    # Extract events and their failure probabilities from the top_events dictionary
+    events = list(top_events.keys())
     n_events = len(events)
-
-    fig, ax = plt.subplots(figsize=(24, 24))
-
-    y_step = -0.5  # vertical spacing per failure
     base_y = 0  # topmost (success) line y-level
 
-    # Draw master event labels
-    for i, event in enumerate(events):
-        ax.text(
-            i, base_y + 0.4, event, ha="center", fontsize=12, fontweight="bold"
-        )
+    # === Collect all y positions to determine vertical range ===
+    min_y = base_y
+    branch_paths = []  # Store branches for final drawing
 
-    # === Draw success path ===
-    ax.plot(
-        range(n_events),
-        [base_y] * n_events,
-        color="black",
-        lw=2,
-    )
-
-    # === Draw each failure sequence ===
-    for seq_index, sequence in enumerate(sequences):
+    for sequence in sequences:
         failures = sequence.split("/")
-        y = base_y  # Start from the top
-        x_coords = list(range(n_events))
-
-        # Initialize last_x to track the last position of each branch
-        last_x = None
+        y = base_y
+        path = [(0, y)]  # Starting point
 
         for i, event in enumerate(events):
-            # If this event is in the failure sequence (and not just due to ordering), drop
+            x = i * x_step
+            # Check if the event failed in this sequence
             if event in failures:
                 events_to_the_right = len(events) - i - 1
-                new_y = y + y_step * 2 ** (events_to_the_right - 1)
-                ax.plot(
-                    [i, i], [y, new_y], color="black", lw=2
-                )  # vertical drop
-                y = new_y
+                y += y_step * 2 ** (events_to_the_right - 1)
+                path.append((x, y))
+                min_y = min(min_y, y)
 
-            # Horizontal line to next event
             if i < n_events - 1:
-                ax.plot([i, i + 1], [y, y], color="black", lw=2)
+                next_x = (i + 1) * x_step
+                path.append((next_x, y))
 
-            # Track last_x position
-            last_x = i
+        branch_paths.append((path, "/".join(failures)))
 
-        # Label the end of the branch with the sequence
+    # === Set figure size dynamically based on x/y range ===
+    x_range = (n_events - 1) * x_step + x_step
+    y_range = abs(min_y - base_y) + 1.5
+    fig_width = x_range
+    fig_height = y_range
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # === Draw top level event labels ===
+    for i, event in enumerate(events):
+        x = i * x_step
+        if i + 1 != len(events):
+            ax.text(
+                x,
+                base_y + 0.4,
+                event,
+                ha="center",
+                fontsize=12,
+                fontweight="bold",
+            )
+        else:
+            ax.text(
+                x + 0.2,
+                base_y + 0.4,
+                event,
+                ha="left",
+                fontsize=12,
+                fontweight="bold",
+            )
+
+    # === Draw success path ===
+    x_coords = [i * x_step for i in range(n_events)]
+    ax.plot(x_coords, [base_y] * n_events, color="black", lw=2)
+
+    probabilities = {}
+    # === Draw branches with probabilities ===
+    for path, label in branch_paths:
+        for j in range(len(path) - 1):
+            (x1, y1), (x2, y2) = path[j], path[j + 1]
+            ax.plot([x1, x2], [y1, y2], color="black", lw=2)
+        probability = probability_from_sequence(label, top_events)
+        probability *= list(top_events.values())[0]
+        # Label the end with the event sequence
         ax.text(
-            last_x + 0.1,
-            y,
-            "/".join(failures),
+            path[-1][0] + 0.2,
+            path[-1][1],
+            f"{label} {probability:.4e}",
             ha="left",
             va="top",
             fontsize=10,
-            color="black",
         )
 
-    # === Style ===
-    ax.set_xlim(-0.5, n_events - 0.5 + 1)  # Extend X-axis for jog
-    ax.set_ylim(y_step * 2 ** (len(events) - 2))
+        # Label each failure event with its probability
+        failure_probabilities = [top_events[key] for key in label.split("/")]
+        failure_index = 0
+        print(label)
+        print(failure_probabilities)
+        for i, location in enumerate(path[:-1]):
+            # if the y value changes there is a failure
+            if not math.isclose(location[1] - path[i + 1][1], 0):
+                prob = failure_probabilities[failure_index]
+                print(prob)
+                ax.text(
+                    path[i + 1][0] + 0.1,
+                    path[i + 1][1],
+                    f"{prob:.4e}",
+                    ha="left",
+                    va="bottom",
+                    fontsize=8,
+                    color="red",
+                )
+                failure_index += 1
+            if failure_index == len(failure_probabilities):
+                break
+        probabilities[label] = probability
+
+    # === Final styling ===
+    ax.set_xlim(-x_step, x_coords[-1] + x_step)
+    ax.set_ylim(min_y - 1, base_y + 1.5)
     ax.axis("off")
-    ax.set_title("Event Tree with 'Ti/DC' Branch", fontsize=14)
+    ax.set_title("Event Tree with Probabilities", fontsize=14)
     plt.tight_layout()
-    plt.savefig("out.png")
+    plt.savefig("out.svg", format="svg")
+    return probabilities
 
 
 # === Example Usage ===
-master = "Ti/O/DC/BO/U/J/ENDSTATE"
-sequences = [
-    "U",
-    "BO",
-    "DC",
-    "BO/U",
-    "DC/BO/U",
-    "DC/BO",
-    "DC/U",
-    "O",
-    "O/DC/BO/U/J",
-]
-draw_event_tree(master, sequences)
+top_events = {
+    "Ti": 8e-2,
+    "DC": 5.3e-5,
+    "BO": 7.6e-4,
+    "U": 4.3e-3,
+    "END STATE": 0,
+}
+sequences = ["DC", "BO", "DC/BO/U", "DC/BO"]
+p_dict = draw_event_tree(top_events, sequences, y_step=-0.5, x_step=1)
+print(sum(p_dict.values()))
