@@ -127,50 +127,117 @@ def draw_event_tree(
     ax.axis("off")
     ax.set_title(title, fontsize=14)
     plt.tight_layout()
-    plt.savefig(f"{"".join(title.split())}.svg", format="svg")
+    plt.savefig(f"{''.join(title.split())}.svg", format="svg")
     return probabilities
 
+
 class Node(object):
-    def __init__(self, label, parent_node=None):
+    def __init__(self, label, parent_node=None, split_fraction=0):
         self.label = label
-        self.child_nodes = []
+        self.child_nodes = set({})
         self.parent_node = parent_node
         self.parent_succeeded = False
-        self.split_fraction = None
-    
-    def add_child_node(self, node):
-        if node not in self.child_nodes:
-            self.child_nodes.append(node)
+        self.split_fraction = split_fraction
+        self.x = 0
+        self.y = 0
+        self.vertical_drop = 0
+
+    def determine_child_splits(self):
+        terminations = 0
+        # print("im a node")
+        # print(self.label)
+        # print(self.child_nodes)
+        for node in self.child_nodes:
+            terminations += node.determine_child_splits()
+        if not self.child_nodes:
+            terminations += 2
+        return terminations
+
+    def print_children(self):
+        print(self.child_nodes)
+        for node in self.child_nodes:
+            node.print_children()
+
+    def count_subsequent_failures(self):
+        # count how many failures occur if this event succeeds
+        failures = 0
+        for node in self.child_nodes:
+            pass
+
+    def determine_vertical_jog(self, y_step):
+        pass
+
+    def set_child_locations(self):
+        for child_node in self.child_nodes:
+            if child_node.parent_succeeded:
+                child_node.x += self.x + self.x_jog
+            else:
+                child_node.x += self.x + self.x_jog
+                child_node.y += self.y + self.y_jog
 
     def __repr__(self):
         return self.label
 
+
 class NodeBasedTree(object):
 
-    def __init__(self, initiating_frequency, top_events, y_step=-0.5, x_step=1.5):
+    def __init__(
+        self, initiating_frequency, top_events, y_step=-0.5, x_step=1.5
+    ):
         self.top_events = top_events.split("/")
         self.initiating_event = self.top_events[0]
         self.parent_node = Node(self.initiating_event)
         self.nodes = {self.initiating_event: self.parent_node}
-        
+        self.add_top_sequence()
 
-    def add_sequence(self, sequence):
-        events = sequence.split("/")
+    def add_top_sequence(self):
         last_node = self.parent_node
-        label_str = self.initiating_event+"/"
-        for previous_event, event in zip(self.top_events[0:-1], self.top_events[1:]):
-            
-            if event in events:
-                # connect to the last node created
-                label = (event+"|"+label_str).rstrip('/')
-                new_node = self.nodes.get(label,Node(label, last_node))
-                self.nodes[label] = new_node
-                last_node = new_node
-                label_str += (event+"/")
-            
+        label_str = self.initiating_event + "/"
+        self.top_level_nodes = []
+        for event in self.top_events[1:]:
+            label = event + "|" + label_str.rstrip("/")
+            new_node = self.nodes.get(
+                label, Node(label, last_node, split_fraction=0)
+            )
+            new_node.parent_succeeded = True
+            self.nodes[label] = new_node
+            last_node.child_nodes.add(new_node)
+            last_node = new_node
+            label_str = label_str + event + "'/"
+            self.top_level_nodes.append(new_node)
+
+    def add_sequence(self, sequence, split_fractions):
+        events = sequence.split("/")
+        events = dict(zip(events, split_fractions))
+        last_node = self.parent_node
+        label_str = self.initiating_event + "/"
+        for top_event in self.top_events[1:]:
+            label = top_event + "|" + label_str.rstrip("/")
+            active_node = self.nodes.get(
+                label, Node(label, last_node, split_fraction=0)
+            )
+            self.nodes[label] = active_node
+            active_node.split_fraction = events.get(top_event, 0)
+            if active_node.split_fraction != 0:
+                label_str = label_str + top_event + "/"
+            else:
+                label_str = top_event + "'" + "/" + label_str
+                active_node.parent_succeeded = True
+
+            last_node.child_nodes.add(active_node)
+            last_node = active_node
+
+    def grow_tree(self):
+        # here we want to add in all the implied paths and set the spatial
+        # relationships
+
+        # start at the parent node
+        self.parent_node.child_nodes[0].set_child_locations()
+        pass
 
     def plot_event_tree():
         pass
+
 
 def main():
     # # === Example Usage ===
@@ -187,14 +254,24 @@ def main():
     # _ = draw_event_tree(
     #     initiating_frequency, top_events, sequences, y_step=-0.5, x_step=1.5
     # )
-    top_events ="i/A/B/C"
+    top_events = "i/A/B/C"
     sequences = ["A/C", "A/B/C"]
-
+    sequences = {"A": [0.1], "A/C": [0.1, 0.01], "A/B/C": [0.1, 0.2, 0.2]}
     tree = NodeBasedTree(0.08, top_events)
-    tree.add_sequence("A/C")
+    for sequence, split_fractions in sequences.items():
+        tree.add_sequence(sequence, split_fractions)
+    # print(tree.parent_node.child_nodes)
+    # for label in tree.nodes:
+    #     print(tree.nodes[label])
+    #     print(tree.nodes[label].child_nodes)
+    #     print(tree.nodes[label].split_fraction)
+    #     print("loop")
+    #     tree.nodes[label].determine_child_splits()
+    # print(tree.top_level_nodes)
+    node = tree.nodes["C|i/A/B"]
+    print(node)
+    node.print_children()
 
-    for label in tree.nodes:
-        print(tree.nodes[label].parent_node)
 
 if __name__ == "__main__":
     main()
