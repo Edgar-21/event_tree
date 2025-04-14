@@ -87,6 +87,7 @@ class Node(object):
     def connect_with_children(self, fig):
         ax = fig.gca()
         for node in self.child_nodes:
+            node.connect_with_children(fig)
             if self.y == node.y:
                 ax.plot([self.x, node.x], [self.y, node.y])
             else:
@@ -97,7 +98,6 @@ class Node(object):
     def add_end_states(self):
         for node in self.child_nodes:
             node.add_end_states()
-        print(self.label)
         if "|" in self.label:
             event, preceeding_sequence = self.label.split("|")
         if len(self.child_nodes) == 0:
@@ -118,9 +118,7 @@ class Node(object):
 
 class NodeBasedTree(object):
 
-    def __init__(
-        self, initiating_frequency, top_events, y_step=-0.5, x_step=1.5
-    ):
+    def __init__(self, initiating_frequency, top_events):
         self.top_events = top_events.split("/")
         self.initiating_event = self.top_events[0]
         self.parent_node = Node(self.initiating_event)
@@ -144,19 +142,25 @@ class NodeBasedTree(object):
 
     def add_sequence(self, sequence, split_fractions):
 
-        events = sequence.split("/")
-        events = dict(zip(events, split_fractions))
+        events_list = sequence.split("/")
+        events = dict(zip(events_list, split_fractions))
+        print(sequence)
+        print(events)
         last_node = self.parent_node
         label_str = self.initiating_event + "/"
 
         for top_event in self.top_events[1:]:
+            print(top_event)
             label = top_event + "|" + label_str.rstrip("/")
             active_node = self.nodes.get(
                 label, Node(label, last_node, split_fraction=0)
             )
             self.nodes[label] = active_node
-            active_node.split_fraction = events.get(top_event, 0)
-            if active_node.split_fraction != 0:
+            active_node.split_fraction = max(
+                events.get(top_event, 0), active_node.split_fraction
+            )
+
+            if top_event in events:
                 label_str = top_event + "/" + label_str
             else:
                 label_str = top_event + "'" + "/" + label_str
@@ -164,22 +168,32 @@ class NodeBasedTree(object):
             last_node.child_nodes.add(active_node)
             last_node = active_node
 
+    def plot_tree(self, y_step=-1, x_step=1):
+        fig = plt.figure()
+        self.parent_node.add_end_states()
+        self.parent_node.determine_vertical_jog(y_step)
+        self.parent_node.set_child_locations(x_step)
+        self.parent_node.plot_node_and_children(fig)
+        self.parent_node.connect_with_children(fig)
+
+        ax = fig.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+
+        x_range = xlim[1] - xlim[0]
+        y_range = ylim[1] - ylim[0]
+
+        fig.set_size_inches(abs(x_range), abs(y_range))
+
+        return fig
+
 
 def test_plots(tree):
-    fig = plt.figure()
-    tree.parent_node.add_end_states()
-    tree.parent_node.determine_vertical_jog(y_step=-1)
-    tree.parent_node.set_child_locations(x_jog=2.5)
-    tree.parent_node.plot_node_and_children(fig)
+    fig = tree.plot_tree(y_step=-1, x_step=4)
 
     plt.tight_layout()
     plt.axis("off")
-    plt.savefig("nodes.png")
-
-    for node in tree.nodes.values():
-        node.connect_with_children(fig)
-    plt.axis("off")
-    plt.savefig("connect.png")
+    plt.savefig("connect.png", bbox_inches="tight")
 
 
 def main():
@@ -194,13 +208,10 @@ def main():
     for sequence, split_fractions in sequences.items():
         tree.add_sequence(sequence, split_fractions)
     test_plots(tree)
-    tn = tree.nodes["C|B'/A'/i"]
-    print(tn.child_nodes)
-    b = tn.child_nodes[0]
-    c = tn.child_nodes[1]
-    print(b.parent_succeeded)
-    print(c.parent_succeeded)
-    print(b.count_child_end_states())
+
+    tn = tree.nodes["B|A'/i"]
+    print(tn.split_fraction)
+    print(tn.parent_node)
 
 
 if __name__ == "__main__":
