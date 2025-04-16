@@ -3,6 +3,15 @@ import math
 import numpy as np
 
 
+def remove_successes(sequence):
+    duplicate_sequence = [i for i in sequence]
+    for previous_event in sequence:
+        if "'" in previous_event:
+            duplicate_sequence.remove(previous_event)
+    sequence = "/".join(duplicate_sequence)
+    return sequence
+
+
 class Node(object):
     def __init__(self, label, parent_node=None, split_fraction=0):
         self.label = label
@@ -67,8 +76,15 @@ class Node(object):
         ax = fig.gca()  # Get the current axes from the figure
         ax.plot(self.x, self.y, "o")  # Plot the point using the axes
         if self.split_fraction != 0:
+            if "|" in self.label:
+                event, preceeding_sequence = self.label.split("|")
+                preceeding_sequence = preceeding_sequence.split("/")
+            else:
+                event = self.label.split("|")[0]
+                preceeding_sequence = ""
+            preceeding_sequence = remove_successes(preceeding_sequence)
             ax.annotate(
-                f"P({self.label})={self.split_fraction:.4e}",
+                f"{self.split_fraction:.3e}",
                 (self.x, self.y + self.y_jog),
                 textcoords="offset points",
                 xytext=(5, 5),
@@ -85,10 +101,10 @@ class Node(object):
         for node in self.child_nodes:
             node.connect_with_children(fig)
             if self.y == node.y:
-                ax.plot([self.x, node.x], [self.y, node.y])
+                ax.plot([self.x, node.x], [self.y, node.y], color="black")
             else:
-                ax.plot([self.x, self.x], [self.y, node.y])
-                ax.plot([self.x, node.x], [node.y, node.y])
+                ax.plot([self.x, self.x], [self.y, node.y], color="black")
+                ax.plot([self.x, node.x], [node.y, node.y], color="black")
 
     def add_end_states(self, top_events):
         for node in self.child_nodes:
@@ -133,14 +149,17 @@ class Node(object):
         for node in self.child_nodes:
             node.label_end_nodes(fig)
         if len(self.child_nodes) == 0:
+            preceeding_sequence = remove_successes(self.label.split("/"))
+
             probability = self.compute_node_probability()
             ax = fig.gca()
             ax.annotate(
-                f"{self.label}: {probability:0.4e}",
-                (self.x, self.y),
+                f"{preceeding_sequence}: {probability:0.4e}",
+                (self.x, self.y - 0.1),
                 textcoords="offset points",
                 xytext=(5, 5),
                 ha="left",
+                va="top",
             )
 
     def grow_tree(self, top_events):
