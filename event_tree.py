@@ -145,11 +145,13 @@ class Node(object):
 
         return chance_of_occurance
 
-    def label_end_nodes(self, fig):
+    def label_end_nodes(self, fig, end_label_list):
         for node in self.child_nodes:
-            node.label_end_nodes(fig)
+            node.label_end_nodes(fig, end_label_list)
         if len(self.child_nodes) == 0:
-            preceeding_sequence = remove_successes(self.label.split("/"))
+            sequence = self.label.split("/")
+            sequence.reverse()
+            preceeding_sequence = remove_successes(sequence)
 
             probability = self.compute_node_probability()
             ax = fig.gca()
@@ -161,6 +163,8 @@ class Node(object):
                 ha="left",
                 va="top",
             )
+            end_label_list.append(preceeding_sequence)
+        return end_label_list
 
     def grow_tree(self, top_events):
         for node in self.child_nodes:
@@ -263,7 +267,7 @@ class NodeBasedTree(object):
         self.parent_node.set_child_locations(x_step)
         self.parent_node.plot_node_and_children(fig)
         self.parent_node.connect_with_children(fig)
-        self.parent_node.label_end_nodes(fig)
+        end_label_list = self.parent_node.label_end_nodes(fig, [])
         self.label_top_events(fig)
 
         ax = fig.gca()
@@ -277,7 +281,7 @@ class NodeBasedTree(object):
 
         fig.set_size_inches(abs(x_range), abs(y_range))
         plt.tight_layout()
-        return fig
+        return fig, end_label_list
 
 
 def test_plots(tree):
