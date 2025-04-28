@@ -84,12 +84,20 @@ class Node(object):
                 preceeding_sequence = ""
             preceeding_sequence = remove_successes(preceeding_sequence)
             ax.annotate(
-                f"{self.split_fraction:.3e}",
+                f"{self.split_fraction:.2e}",
                 (self.x, self.y + self.y_jog),
                 textcoords="offset points",
                 xytext=(5, 5),
                 ha="left",
-            )  # Add label next to the point
+            )
+            ax.annotate(
+                event,
+                (self.x, self.y + self.y_jog),
+                textcoords="offset points",
+                xytext=(5, -3),
+                ha="left",
+                va="top",
+            )
 
     def plot_node_and_children(self, fig):
         self.plot_node(fig)
@@ -145,25 +153,28 @@ class Node(object):
 
         return chance_of_occurance
 
-    def label_end_nodes(self, fig, end_label_list):
+    def label_end_nodes(self, fig, end_label_list, end_states):
         for node in self.child_nodes:
-            node.label_end_nodes(fig, end_label_list)
+            node.label_end_nodes(fig, end_label_list, end_states)
         if len(self.child_nodes) == 0:
             sequence = self.label.split("/")
             sequence.reverse()
             preceeding_sequence = remove_successes(sequence)
+            damage_state = end_states.get(preceeding_sequence, "?")
 
             probability = self.compute_node_probability()
             ax = fig.gca()
             ax.annotate(
-                f"{preceeding_sequence}: {probability:0.4e}",
+                f"{preceeding_sequence}: {probability:0.2e}, {damage_state}",
                 (self.x, self.y - 0.1),
                 textcoords="offset points",
                 xytext=(5, 5),
                 ha="left",
-                va="top",
+                va="bottom",
             )
-            end_label_list.append(preceeding_sequence)
+            end_label_list.append(
+                [preceeding_sequence, probability, damage_state]
+            )
         return end_label_list
 
     def grow_tree(self, top_events):
@@ -256,7 +267,7 @@ class NodeBasedTree(object):
             ha="left",
         )
 
-    def plot_tree(self, y_step=-1, x_step=1):
+    def plot_tree(self, y_step=-1, x_step=1, damage_states=dict({})):
         self.y_step = y_step
         self.x_step = x_step
         fig = plt.figure()
@@ -267,39 +278,53 @@ class NodeBasedTree(object):
         self.parent_node.set_child_locations(x_step)
         self.parent_node.plot_node_and_children(fig)
         self.parent_node.connect_with_children(fig)
-        end_label_list = self.parent_node.label_end_nodes(fig, [])
+        end_label_list = self.parent_node.label_end_nodes(
+            fig, [], end_states=damage_states
+        )
         self.label_top_events(fig)
 
         ax = fig.gca()
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
-        ax.set_ylim([ylim[0], -y_step])
+        ax.set_ylim([ylim[0] - 0.5, -y_step + 0.5])
         ylim = ax.get_ylim()
 
         x_range = xlim[1] - xlim[0]
         y_range = ylim[1] - ylim[0]
 
-        fig.set_size_inches(abs(x_range), abs(y_range))
+        fig.set_size_inches(abs(x_range) + 1, abs(y_range))
         plt.tight_layout()
         return fig, end_label_list
 
 
-def test_plots(tree):
-    fig = tree.plot_tree(y_step=-1, x_step=4)
+def test_plots(tree, damage_states):
+    fig = tree.plot_tree(y_step=-0.3, x_step=1, damage_states=damage_states)
 
     plt.axis("off")
-    plt.savefig("connect.png", bbox_inches="tight")
+    plt.tight_layout()
+    plt.savefig("test.pdf", bbox_inches="tight")
+    # plt.show()
 
     return tree
 
 
 def main():
-    top_events = "i/A/B/C/D"
-    sequences = {"B/C": [0.1, 0.01], "A/B/C/D": [0.1, 0.2, 0.3, 0.4]}
+    top_events = "i/A/B/C/D/E"
+    sequences = {
+        "B/D": [0.1, 0.5],
+        "A/B/C/D/E": [0.1, 0.2, 0.3, 0.4, 0.5],
+        "E": [0.25],
+    }
+    damage_states = {
+        "i": "ok",
+        "i/B/D": "ok",
+        "i/A/B/C/D/E": "cd",
+        "i/E": "ok",
+    }
     tree = NodeBasedTree(0.08, top_events)
     for sequence, split_fractions in sequences.items():
         tree.add_sequence(sequence, split_fractions)
-    tree = test_plots(tree)
+    tree = test_plots(tree, damage_states=damage_states)
     # tree.plot_tree()
     # tree.parent_node.print_children()
 

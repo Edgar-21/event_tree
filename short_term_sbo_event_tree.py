@@ -1,5 +1,7 @@
 from event_tree import NodeBasedTree
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 
 def compare_lists(sub_list, main_list):
@@ -111,7 +113,7 @@ sequences = {
         1,
         1,
         3.4e-1,
-        8e-1,
+        9e-1,
         1,
         2e-1,
     ],
@@ -563,19 +565,52 @@ tree = NodeBasedTree(initiating_frequency, top_events)
 for sequence, split_fractions in sequences.items():
     tree.add_sequence(sequence, split_fractions)
 
-fig, end_label_list = tree.plot_tree(y_step=-0.3, x_step=1)
+with open("short_term_sbo_damage.csv", "r") as f:
+    damage_states = {}
+    for line in f:
+        key, value = line.rstrip().split(",")
+        damage_states[key] = value
+
+fig, end_label_list = tree.plot_tree(
+    y_step=-0.3, x_step=1, damage_states=damage_states
+)
 plt.axis("off")
-plt.savefig("sbo_event_tree.png", bbox_inches="tight")
-plt.savefig("sbo_event_tree.pdf", bbox_inches="tight")
+plt.savefig("short_term_sbo_event_tree.png", bbox_inches="tight")
+plt.savefig("short_term_sbo_event_tree.pdf", bbox_inches="tight")
 
-with open("sbo_events.txt", "r") as f:
+with open("short_term_sbo_events.txt", "r") as f:
     end_events = [line.strip() for line in f]
+end_label_list = np.array(end_label_list)
+missing_events, extra_events = compare_lists(end_label_list[:, 0], end_events)
 
-missing_events, extra_events = compare_lists(end_label_list, end_events)
-
-print(len(end_events))
-print(len(missing_events))
-print(len(end_label_list))
-print(len(extra_events))
 missing_events.sort(key=len, reverse=True)
-print(extra_events)
+
+
+events = end_label_list[:, 0]
+probs = end_label_list[:, 1]
+
+sequence_dict = dict(zip(events, [float(p) for p in probs]))
+
+
+cd_probability = 0
+ok_probability = 0
+for sequence, probability in sequence_dict.items():
+    if damage_states[sequence] == "n":
+        cd_probability += probability
+    if damage_states[sequence] == "ok":
+        ok_probability += probability
+
+print(cd_probability)
+print(ok_probability)
+print(cd_probability + ok_probability)
+
+print(end_label_list.shape)
+
+data_dict = {
+    "sequence": end_label_list[:, 0],
+    "probability": end_label_list[:, 1],
+    "state": end_label_list[:, 2],
+}
+
+df = pd.DataFrame(data_dict)
+df.to_csv("st_sbo_summary.csv")
